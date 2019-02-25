@@ -34,6 +34,8 @@ type ServiceConfig struct {
 	OWSClusterNodes   []string `json:"ows_cluster_nodes"`
 	TempDir           string   `json:"temp_dir"`
 	MaxGrpcBufferSize int      `json:"max_grpc_buffer_size"`
+	TerriaUrl         string   `json:"terria_url"`
+	TerriaInitLayer   string   `json:"terria_init_layer"`
 }
 
 // CacheLevel contains the source files of one layer as well as the

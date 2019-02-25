@@ -136,7 +136,7 @@
                         <a class="page-scroll" href="#intro">Go to top</a>
                     </li>
                 </ul>
-                <p class="copyright text-muted small">Copyright &copy 2018; NCI All Rights Reserved</p>
+                <p class="copyright text-muted small">Copyright &copy 2017 - {{ currentYear }} NCI; All Rights Reserved</p>
             </div>
         </div>
     </div>
@@ -178,7 +178,7 @@
     var activeTabId = 'NowViewing';
     var iFrame = document.getElementById('embedded-national-map');
 
-    var terriaUrl = 'http://130.56.242.16/terria';
+    var terriaUrl = '{{ terriaUrl }}';
     iFrame.src = terriaUrl + '#clean&start=' + encodeURIComponent(JSON.stringify(initJson));
 
     var message = {
@@ -192,18 +192,27 @@
                         "preserveOrder": true,
                         isOpen: true,
                         items: [
+                            {{ range ds := datasets }}
                             {
-                                "name": "geoglam",
+                                "name": "{{ ds.Name }}",
                                 "type": "wms-getCapabilities",
-                                "url": "http://130.56.242.12/ows/geoglam",
+                                "url": "{{ ds.URL }}",
                             },
-                            {
-                                "name": "dea/ls",
-                                "type": "wms-getCapabilities",
-                                "url": "http://130.56.242.12/ows/dea/ls",
-                            }
-
+                            {{ end }}
                         ]
+                    },
+                    {
+                              "name": "Root Group/GSKY Datasets/geoglam/Geoglam Total Cover C6",
+                              "id": "Root Group/GSKY Datasets/geoglam/Geoglam Total Cover C6",
+                              "nowViewingIndex": 0,
+                              "isEnabled": true,
+                              "isShown": true,
+                              "opacity": 1.0,
+                              "type": "wms",
+                              "parents": [
+                                  "Root Group/GSKY Datasets",
+                                  "Root Group/GSKY Datasets/geoglam"
+                              ]
                     }
                 ]
             }

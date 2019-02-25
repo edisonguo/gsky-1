@@ -1232,9 +1232,14 @@ func owsHandler(w http.ResponseWriter, r *http.Request) {
 	generalHandler(config, w, r)
 }
 
+func portalHandler(w http.ResponseWriter, r *http.Request) {
+	servePortal(configMap, w, r)
+}
+
 func main() {
-	fs := http.FileServer(http.Dir(utils.DataDir + "/static"))
-	http.Handle("/", fs)
+	//fs := http.FileServer(http.Dir(utils.DataDir + "/static"))
+	//http.Handle("/", fs)
+	http.HandleFunc("/", portalHandler)
 	http.HandleFunc("/ows", owsHandler)
 	http.HandleFunc("/ows/", owsHandler)
 	Info.Printf("GSKY is ready")
