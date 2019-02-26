@@ -27,6 +27,7 @@ var DataDir = "."
 const ReservedMemorySize = 1.5 * 1024 * 1024 * 1024
 
 type ServiceConfig struct {
+	OWSProtocol       string `json:"ows_protocol"`
 	OWSHostname       string `json:"ows_hostname"`
 	NameSpace         string
 	MASAddress        string   `json:"mas_address"`
@@ -74,6 +75,7 @@ type BandExpressions struct {
 // Layer contains all the details that a layer needs
 // to be published and rendered
 type Layer struct {
+	OWSProtocol string `json:"ows_protocol"`
 	OWSHostname string `json:"ows_hostname"`
 	NameSpace   string
 	Name        string `json:"name"`
@@ -454,6 +456,7 @@ func LoadAllConfigFiles(rootDir string, verbose bool) (map[string]*Config, error
 				}
 				config.Layers[i].NameSpace = ns
 				for j := range config.Layers[i].Styles {
+					config.Layers[i].Styles[j].OWSProtocol = config.Layers[i].OWSProtocol
 					config.Layers[i].Styles[j].OWSHostname = config.Layers[i].OWSHostname
 					config.Layers[i].Styles[j].NameSpace = config.Layers[i].NameSpace
 					if len(config.Layers[i].Styles[j].DataSource) == 0 {
@@ -818,6 +821,10 @@ func (config *Config) LoadConfigFile(configFile string, verbose bool) error {
 
 	config.ServiceConfig.MaxGrpcBufferSize = config.ServiceConfig.MaxGrpcBufferSize * 1024 * 1024
 
+	if len(config.ServiceConfig.OWSProtocol) == 0 {
+		config.ServiceConfig.OWSProtocol = "http"
+	}
+
 	for i, layer := range config.Layers {
 		bandExpr, err := ParseBandExpressions(layer.RGBProducts)
 		if err != nil {
@@ -833,6 +840,7 @@ func (config *Config) LoadConfigFile(configFile string, verbose bool) error {
 
 		config.GetLayerDates(i, verbose)
 
+		config.Layers[i].OWSProtocol = config.ServiceConfig.OWSProtocol
 		config.Layers[i].OWSHostname = config.ServiceConfig.OWSHostname
 
 		if config.Layers[i].MaxGrpcRecvMsgSize <= DefaultRecvMsgSize {

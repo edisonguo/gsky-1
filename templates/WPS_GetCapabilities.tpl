@@ -39,21 +39,21 @@
 		<ows:Operation name="GetCapabilities">
 			<ows:DCP>
 				<ows:HTTP>
-					<ows:Get xlink:href="http://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
+					<ows:Get xlink:href="{{ .ServiceConfig.OWSProtocol }}://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
 				</ows:HTTP>
 			</ows:DCP>
 		</ows:Operation>
 		<ows:Operation name="DescribeProcess">
 			<ows:DCP>
 				<ows:HTTP>
-					<ows:Get xlink:href="http://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
+					<ows:Get xlink:href="{{ .ServiceConfig.OWSProtocol }}://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
 				</ows:HTTP>
 			</ows:DCP>
 		</ows:Operation>
 		<ows:Operation name="Execute">
 			<ows:DCP>
 				<ows:HTTP>
-					<ows:Get xlink:href="http://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
+					<ows:Get xlink:href="{{ .ServiceConfig.OWSProtocol }}://{{ .ServiceConfig.OWSHostname }}/ows/{{ .ServiceConfig.NameSpace }}"/>
 				</ows:HTTP>
 			</ows:DCP>
 		</ows:Operation>

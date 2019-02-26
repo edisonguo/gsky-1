@@ -1,30 +1,32 @@
 package main
+
 import (
-	"bytes"	
+	"bytes"
 	"io"
-	"time"
+	"log"
 	"net/http"
 	"sort"
-	"log"
+	"time"
 
-	"github.com/nci/gsky/utils"
 	"github.com/CloudyKit/jet"
+	"github.com/nci/gsky/utils"
 )
 
 const DefaultTerriaUrl = "http://nationalmap.gov.au"
 
 type GSKYGetCaps struct {
-	Name string
-	URL string
+	Name    string
+	Service string
+	URL     string
 }
 
 func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *http.Request) {
-	assetDir := utils.DataDir + "/static";
+	assetDir := utils.DataDir + "/static"
 	if r.URL.Path != "/" && r.URL.Path != "/index.html" {
-		http.ServeFile(w, r, assetDir + r.URL.Path)
-		return 
+		http.ServeFile(w, r, assetDir+r.URL.Path)
+		return
 	}
-	
+
 	view := jet.NewSet(jet.SafeWriter(func(w io.Writer, b []byte) {
 		w.Write(b)
 	}), "/")
@@ -41,11 +43,13 @@ func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *h
 
 	vars.Set("currentYear", time.Now().Year())
 
-	datasets := make([]*GSKYGetCaps, len(configMap))
+	dsGetCaps := make([]*GSKYGetCaps, 0)
+
 	var terriaUrl string
+
+	var terriaInitGroup string
 	var terriaInitLayer string
 
-	ids := 0
 	for ns, conf := range configMap {
 		if len(terriaUrl) == 0 && len(conf.ServiceConfig.TerriaUrl) > 0 {
 			terriaUrl = conf.ServiceConfig.TerriaUrl
@@ -54,7 +58,8 @@ func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *h
 		if len(terriaInitLayer) == 0 && len(conf.ServiceConfig.TerriaInitLayer) > 0 {
 			for _, layer := range conf.Layers {
 				if layer.Name == conf.ServiceConfig.TerriaInitLayer {
-					terriaInitLayer = ns + "/" + layer.Title
+					terriaInitGroup = ns
+					terriaInitLayer = layer.Title
 					break
 				}
 			}
@@ -66,10 +71,16 @@ func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *h
 			}
 		}
 
-		nsUrl := "http://" + conf.ServiceConfig.OWSHostname + "/ows/" + ns
-		datasets[ids] = &GSKYGetCaps {Name: ns, URL: nsUrl}	
-		ids++
-	}	
+		nsUrl := conf.ServiceConfig.OWSProtocol + "://" + conf.ServiceConfig.OWSHostname + "/ows/" + ns
+
+		if len(conf.Layers) > 0 {
+			dsGetCaps = append(dsGetCaps, &GSKYGetCaps{Name: ns, Service: "wms-getCapabilities", URL: nsUrl})
+		}
+
+		if len(conf.Processes) > 0 {
+			dsGetCaps = append(dsGetCaps, &GSKYGetCaps{Name: ns + " geometry drill", Service: "wps-getCapabilities", URL: nsUrl})
+		}
+	}
 
 	if len(terriaUrl) == 0 {
 		terriaUrl = DefaultTerriaUrl
@@ -78,10 +89,11 @@ func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *h
 
 	if len(terriaInitLayer) > 0 {
 		vars.Set("terriaInitLayer", terriaInitLayer)
+		vars.Set("terriaInitGroup", terriaInitGroup)
 	}
 
-	sort.Slice(datasets, func(i, j int) bool { return datasets[i].Name < datasets[j].Name })
-	vars.Set("datasets", datasets)
+	sort.Slice(dsGetCaps, func(i, j int) bool { return dsGetCaps[i].Name < dsGetCaps[j].Name })
+	vars.Set("datasets", dsGetCaps)
 
 	if err = template.Execute(&resBuf, vars, nil); err != nil {
 		log.Printf("portal error: %v", err)
@@ -89,5 +101,5 @@ func servePortal(configMap map[string]*utils.Config, w http.ResponseWriter, r *h
 		return
 	}
 
-	w.Write(resBuf.Bytes())	
+	w.Write(resBuf.Bytes())
 }

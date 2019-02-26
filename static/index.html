@@ -12,7 +12,7 @@
     <link href="/css/font-awesome.min.css" rel="stylesheet" type="text/css">
     <link href="http://fonts.googleapis.com/css?family=Lato:300,400,700,300italic,400italic,700italic" rel="stylesheet" type="text/css">
     <style>
-    #embedded-national-map {
+    #embedded-terria-map {
         width: 85%;
         height: 100%;
         margin-top: 50px;
@@ -41,6 +41,10 @@
                 <li>
                     <a class="page-scroll" href="http://github.com/nci/gsky">Github</a>
                 </li>
+                <li>
+                    <a class="page-scroll" href="https://gsky.readthedocs.io/en/latest/index.html">Docs</a>
+                </li>
+
                 <li>
                     <a class="page-scroll" href="http://nci.org.au">NCI</a>
                 </li>
@@ -79,7 +83,7 @@
 <ul>
 <li><strong>Scale</strong>: Distributed solution that scales in serving large volume of data for concurrent user access</li>
 <li><strong>Work with raw data</strong>: Transparent ingestion of geospatial collections in many scientific data formats such as NetCDF, HDF or geoTIFF</li>
-<li><strong>Compute on-the-fly</strong>: No need to precompute products. Resampling and reprojection happen on-the-fly in real time</li>
+<li><strong>Compute on-the-fly</strong>: No need to precompute products. Resampling and reprojection happen on-the-fly in near real time</li>
 <li><strong>Standards</strong>: Implements OGC standards such as WMS, WCS and WPS</li>
 </ul>
 
@@ -97,6 +101,7 @@
                     <h2 class="section-heading">Get help</h2>
                     <ul>
 <li>Follow our <a href="https://github.com/nci/gsky-notebooks">Jupyter notebooks</a> for GSKY tutorials</li>
+<li>Read GSKY <a href="https://gsky.readthedocs.io/en/latest/index.html">Documentations</a></li>
 <li>Submit an <a href="https://github.com/nci/gsky/issues">issue</a> on Github</li>
 </ul>
 
@@ -112,7 +117,7 @@
                     <hr class="section-heading-spacer">
                     <div class="clearfix"></div>
                     <h2 class="section-heading">Want to try it?</h2>
-<p>In the following interactive TerriaMap, one can click on <code>Add data</code> to view our currently published datasets</p>
+<p>In the following interactive TerriaMap, you may click on <code>Add data</code> to view our currently published datasets</p>
 <p>In fact, any OGC compatible client can be used.</p>
 
                 </div>
@@ -120,15 +125,15 @@
         </div> 
     </div>
 
-    <div id="national-map">
-         <iframe id="embedded-national-map" frameBorder="0"></iframe>
+    <div id="terria-map">
+         <iframe id="embedded-terria-map" frameBorder="0"></iframe>
     </div>
 
 
 </section>
     
 <footer>
-    <div id="post-national-map" class="container">
+    <div id="post-terria-map" class="container">
         <div class="row">
             <div class="col-md-8">
                 <ul class="list-inline">
@@ -148,12 +153,6 @@
 <script src="/js/landing-page.js"></script>
 
 <script>
-    // Start the map at a particular location, with particular data showing,
-    // just by passing the parameters in through the URL.
-    // 'initJson' below is derived from a "share" URL, converted back to JSON.
-    // You could instead directly place the share URL in the iframe's "src" attribute.
-    // Note Internet Explorer (even IE11) has a limit on URL lengths, even in iframes,
-    // so if this initJson gets too much longer, it may fail on IE.
     var initJson = {
         "version": "0.0.05",
         "initSources": [{
@@ -175,55 +174,60 @@
                 "viewerMode":"2d",
         }]
     };
-    var activeTabId = 'NowViewing';
-    var iFrame = document.getElementById('embedded-national-map');
+    var iFrame = document.getElementById('embedded-terria-map');
 
     var terriaUrl = '{{ terriaUrl }}';
     iFrame.src = terriaUrl + '#clean&start=' + encodeURIComponent(JSON.stringify(initJson));
 
-    var message = {
+    var terriaLayers = {
         initSources: [
             {
                 catalog: [
                     {
-                        type: "group",
-                        name: "GSKY Datasets",
-                        isPromoted: true,
+                        "type": "group",
+                        "name": "GSKY Datasets",
+                        "isPromoted": true,
                         "preserveOrder": true,
-                        isOpen: true,
-                        items: [
+                        "isOpen": true,
+                        "items": [
                             {{ range ds := datasets }}
                             {
                                 "name": "{{ ds.Name }}",
-                                "type": "wms-getCapabilities",
+                                "type": "{{ ds.Service }}",
                                 "url": "{{ ds.URL }}",
                             },
                             {{ end }}
+                            {{ if isset(terriaInitGroup) && isset(terriaInitLayer) }}
+                            {
+                                "name": "{{ terriaInitGroup }}",
+                                "isOpen": true,
+                                "type":  "wms-getCapabilities",
+                                "items": [
+                                   {
+                                      "name": "{{ terriaInitLayer }}",
+                                      "isEnabled": true,
+                                      "opacity": 1,
+                                      "type":  "wms",
+                                   },
+
+                                 ]
+                            },
+                            {{ end }}
                         ]
+
                     },
-                    {
-                              "name": "Root Group/GSKY Datasets/geoglam/Geoglam Total Cover C6",
-                              "id": "Root Group/GSKY Datasets/geoglam/Geoglam Total Cover C6",
-                              "nowViewingIndex": 0,
-                              "isEnabled": true,
-                              "isShown": true,
-                              "opacity": 1.0,
-                              "type": "wms",
-                              "parents": [
-                                  "Root Group/GSKY Datasets",
-                                  "Root Group/GSKY Datasets/geoglam"
-                              ]
-                    }
+
                 ]
-            }
+            },
+
         ]
     };
 
     window.addEventListener('message', function(e) {
-        var iframeWindow = document.getElementById('embedded-national-map').contentWindow;
+        var iframeWindow = document.getElementById('embedded-terria-map').contentWindow;
         if (e.source === iframeWindow && e.data === 'ready') {
-            iframeWindow.postMessage(message, terriaUrl);
-            iframeWindow.postMessage(message, terriaUrl);
+            iframeWindow.postMessage(terriaLayers, terriaUrl);
+            iframeWindow.postMessage(terriaLayers, terriaUrl);
         }
     });
 
@@ -249,12 +253,9 @@
 
     function resizeIFrame() {
         var windowHeight = window.innerHeight;
-        var preHeight = document.getElementById('national-map').offsetTop;
-        var postHeight = fullOuterHeight(document.getElementById('post-national-map'));
-        var bodyMarginBottom = parseInt(getComputedStyle(document.body).marginBottom);
-        var iFrameHeight = windowHeight; // - preHeight - postHeight - bodyMarginBottom;
-        document.getElementById('national-map').setAttribute('style', 'height:' + iFrameHeight + 'px');
-        document.getElementById('national-map').style.height = iFrameHeight + 'px';
+        var iFrameHeight = windowHeight;;
+        document.getElementById('terria-map').setAttribute('style', 'height:' + iFrameHeight + 'px');
+        document.getElementById('terria-map').style.height = iFrameHeight + 'px';
     }
     window.addEventListener('resize', resizeIFrame, false);
     resizeIFrame();
