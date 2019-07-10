@@ -37,6 +37,7 @@ import (
 
 	_ "net/http/pprof"
 
+	mux "github.com/gorilla/mux"
 	geo "github.com/nci/geometry"
 )
 
@@ -1356,10 +1357,64 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, upath)
 }
 
+type DynamicLayerHandler struct {
+	Layer     *utils.Layer
+	Namespace string
+}
+
+func (h *DynamicLayerHandler) layerHandler(w http.ResponseWriter, r *http.Request) {
+	namespace := h.Namespace
+	conf, ok := configMap[namespace]
+	if !ok {
+		Info.Printf("Invalid dataset namespace: %v for url: %v\n", namespace, r.URL.Path)
+		http.Error(w, fmt.Sprintf("Invalid dataset namespace: %v\n", namespace), 404)
+		return
+	}
+
+	config := &utils.Config{}
+	opts := make(map[string]string)
+	opts["namespace"] = namespace
+	vars := mux.Vars(r)
+	for varName := range vars {
+		opts[varName] = vars[varName]
+	}
+	config.LoadConfigFile(h.Layer.TemplateFile, opts, *verbose)
+	config.ServiceConfig = conf.ServiceConfig
+	config.ServiceConfig.NameSpace = namespace
+
+	log.Printf("xxxxx %#v", config)
+}
+
 func main() {
-	http.HandleFunc("/", fileHandler)
-	http.HandleFunc("/ows", owsHandler)
-	http.HandleFunc("/ows/", owsHandler)
+	router := mux.NewRouter()
+	router.HandleFunc("/", fileHandler)
+	for ns := range configMap {
+		config := configMap[ns]
+		for _, layer := range config.Layers {
+			if len(layer.URLRouter) > 0 && len(layer.TemplateFile) > 0 {
+				r := layer.URLRouter
+				if r[0] == '/' {
+					r = r[1:]
+				}
+				var prefix string
+				if ns != "." {
+					prefix = ns + "/"
+				}
+				path := "/ows/" + prefix + r
+				handler := &DynamicLayerHandler{
+					Layer:     &layer,
+					Namespace: ns,
+				}
+				router.HandleFunc(path, handler.layerHandler)
+
+				log.Printf("xxxxxx %s", path)
+			}
+		}
+	}
+
+	router.HandleFunc("/ows", owsHandler)
+	router.HandleFunc("/ows/", owsHandler)
+	http.Handle("/", router)
 
 	Info.Printf("GSKY is ready")
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), nil))

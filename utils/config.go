@@ -82,13 +82,15 @@ type LayerAxis struct {
 // Layer contains all the details that a layer needs
 // to be published and rendered
 type Layer struct {
-	OWSHostname string `json:"ows_hostname"`
-	NameSpace   string `json:"namespace"`
-	Name        string `json:"name"`
-	Title       string `json:"title"`
-	Abstract    string `json:"abstract"`
-	MetadataURL string `json:"metadata_url"`
-	DataURL     string `json:"data_url"`
+	OWSHostname  string `json:"ows_hostname"`
+	NameSpace    string `json:"namespace"`
+	Name         string `json:"name"`
+	Title        string `json:"title"`
+	Abstract     string `json:"abstract"`
+	MetadataURL  string `json:"metadata_url"`
+	DataURL      string `json:"data_url"`
+	URLRouter    string `json:"url_router"`
+	TemplateFile string `json:"template_file"`
 	//CacheLevels  []CacheLevel `json:"cache_levels"`
 	InputLayers                  []Layer  `json:"input_layers"`
 	DisableServices              []string `json:"disable_services"`
@@ -466,55 +468,15 @@ func LoadAllConfigFiles(rootDir string, verbose bool) (map[string]*Config, error
 			log.Printf("Loading config file: %s under namespace: %s\n", absPath, relPath)
 
 			config := &Config{}
-			e := config.LoadConfigFile(absPath, verbose)
+			opts := make(map[string]string)
+			opts["namespace"] = relPath
+			e := config.LoadConfigFile(absPath, opts, verbose)
 			if e != nil {
 				return e
 			}
 
 			configMap[relPath] = config
 
-			for i := range config.Layers {
-				ns := relPath
-				if relPath == "." {
-					ns = ""
-				}
-				config.Layers[i].NameSpace = ns
-				for j := range config.Layers[i].Styles {
-					config.Layers[i].Styles[j].OWSHostname = config.Layers[i].OWSHostname
-					config.Layers[i].Styles[j].NameSpace = config.Layers[i].NameSpace
-					if len(config.Layers[i].Styles[j].DataSource) == 0 {
-						config.Layers[i].Styles[j].DataSource = config.Layers[i].DataSource
-					}
-					if config.Layers[i].Styles[j].LegendWidth <= 0 {
-						config.Layers[i].Styles[j].LegendWidth = DefaultLegendWidth
-					}
-					if config.Layers[i].Styles[j].LegendHeight <= 0 {
-						config.Layers[i].Styles[j].LegendHeight = DefaultLegendHeight
-					}
-
-					bandExpr, err := ParseBandExpressions(config.Layers[i].Styles[j].RGBProducts)
-					if err != nil {
-						return fmt.Errorf("Layer %v, style %v, RGBExpression parsing error: %v", config.Layers[i].Name, config.Layers[i].Styles[j].Name, err)
-					}
-					config.Layers[i].Styles[j].RGBExpressions = bandExpr
-
-					if len(config.Layers[i].Styles[j].FeatureInfoBands) > 0 {
-						featureInfoExpr, err := ParseBandExpressions(config.Layers[i].Styles[j].FeatureInfoBands)
-						if err != nil {
-							return fmt.Errorf("Layer %v, style %v, FeatureInfoExpression parsing error: %v", config.Layers[i].Name, config.Layers[i].Styles[j].Name, err)
-						}
-						config.Layers[i].Styles[j].FeatureInfoExpressions = featureInfoExpr
-					}
-
-					if len(config.Layers[i].Styles[j].InputLayers) == 0 && len(config.Layers[i].InputLayers) > 0 {
-						config.Layers[i].Styles[j].InputLayers = config.Layers[i].InputLayers
-					}
-
-					if len(config.Layers[i].Styles[j].DisableServices) == 0 && len(config.Layers[i].DisableServices) > 0 {
-						config.Layers[i].Styles[j].DisableServices = config.Layers[i].DisableServices
-					}
-				}
-			}
 		}
 		return nil
 	})
@@ -825,7 +787,7 @@ func ParseBandExpressions(bands []string) (*BandExpressions, error) {
 // LoadConfigFileTemplate parses the config as a Jet
 // template and escapes any GSKY here docs (i.e. $gdoc$)
 // into valid one-line JSON strings.
-func LoadConfigFileTemplate(configFile string) ([]byte, error) {
+func LoadConfigFileTemplate(configFile string, templateVars map[string]string) ([]byte, error) {
 	path := filepath.Dir(configFile)
 
 	view := jet.NewSet(jet.SafeWriter(func(w io.Writer, b []byte) {
@@ -839,6 +801,9 @@ func LoadConfigFileTemplate(configFile string) ([]byte, error) {
 
 	var resBuf bytes.Buffer
 	vars := make(jet.VarMap)
+	for k := range templateVars {
+		vars.Set(k, templateVars[k])
+	}
 	if err = template.Execute(&resBuf, vars, nil); err != nil {
 		return nil, err
 	}
@@ -884,9 +849,8 @@ func LoadConfigFileTemplate(configFile string) ([]byte, error) {
 
 // LoadConfigFile marshalls the config.json document returning an
 // instance of a Config variable containing all the values
-func (config *Config) LoadConfigFile(configFile string, verbose bool) error {
-	*config = Config{}
-	cfg, err := LoadConfigFileTemplate(configFile)
+func (config *Config) LoadConfigFile(configFile string, loadingOptions map[string]string, verbose bool) error {
+	cfg, err := LoadConfigFileTemplate(configFile, loadingOptions)
 	if verbose {
 		log.Printf("%v: %v", configFile, string(cfg))
 	}
@@ -1020,6 +984,50 @@ func (config *Config) LoadConfigFile(configFile string, verbose bool) error {
 		}
 
 	}
+
+	for i := range config.Layers {
+		ns := loadingOptions["namespace"]
+		if ns == "." {
+			ns = ""
+		}
+		config.Layers[i].NameSpace = ns
+		for j := range config.Layers[i].Styles {
+			config.Layers[i].Styles[j].OWSHostname = config.Layers[i].OWSHostname
+			config.Layers[i].Styles[j].NameSpace = config.Layers[i].NameSpace
+			if len(config.Layers[i].Styles[j].DataSource) == 0 {
+				config.Layers[i].Styles[j].DataSource = config.Layers[i].DataSource
+			}
+			if config.Layers[i].Styles[j].LegendWidth <= 0 {
+				config.Layers[i].Styles[j].LegendWidth = DefaultLegendWidth
+			}
+			if config.Layers[i].Styles[j].LegendHeight <= 0 {
+				config.Layers[i].Styles[j].LegendHeight = DefaultLegendHeight
+			}
+
+			bandExpr, err := ParseBandExpressions(config.Layers[i].Styles[j].RGBProducts)
+			if err != nil {
+				return fmt.Errorf("Layer %v, style %v, RGBExpression parsing error: %v", config.Layers[i].Name, config.Layers[i].Styles[j].Name, err)
+			}
+			config.Layers[i].Styles[j].RGBExpressions = bandExpr
+
+			if len(config.Layers[i].Styles[j].FeatureInfoBands) > 0 {
+				featureInfoExpr, err := ParseBandExpressions(config.Layers[i].Styles[j].FeatureInfoBands)
+				if err != nil {
+					return fmt.Errorf("Layer %v, style %v, FeatureInfoExpression parsing error: %v", config.Layers[i].Name, config.Layers[i].Styles[j].Name, err)
+				}
+				config.Layers[i].Styles[j].FeatureInfoExpressions = featureInfoExpr
+			}
+
+			if len(config.Layers[i].Styles[j].InputLayers) == 0 && len(config.Layers[i].InputLayers) > 0 {
+				config.Layers[i].Styles[j].InputLayers = config.Layers[i].InputLayers
+			}
+
+			if len(config.Layers[i].Styles[j].DisableServices) == 0 && len(config.Layers[i].DisableServices) > 0 {
+				config.Layers[i].Styles[j].DisableServices = config.Layers[i].DisableServices
+			}
+		}
+	}
+
 	return nil
 }
 
