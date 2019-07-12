@@ -591,8 +591,8 @@ const DefaultGrpcWcsConcPerNode = 16
 const DefaultWmsPolygonShardConcLimit = 2
 const DefaultWcsPolygonShardConcLimit = 2
 
-const DefaultWmsMaxWidth = 512
-const DefaultWmsMaxHeight = 512
+const DefaultWmsMaxWidth = 1024
+const DefaultWmsMaxHeight = 1024
 const DefaultWcsMaxWidth = 50000
 const DefaultWcsMaxHeight = 30000
 const DefaultWcsMaxTileWidth = 1024
@@ -892,7 +892,8 @@ func (config *Config) LoadConfigFile(configFile string, loadingOptions map[strin
 		}
 		config.Layers[i].FeatureInfoExpressions = featureInfoExpr
 
-		config.GetLayerDates(i, verbose)
+		// we disable this for now for loading the timestamps on demand
+		//config.GetLayerDates(i, verbose)
 
 		config.Layers[i].OWSHostname = config.ServiceConfig.OWSHostname
 

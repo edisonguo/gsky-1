@@ -1378,43 +1378,48 @@ func (h *DynamicLayerHandler) layerHandler(w http.ResponseWriter, r *http.Reques
 	for varName := range vars {
 		opts[varName] = vars[varName]
 	}
-	config.LoadConfigFile(h.Layer.TemplateFile, opts, *verbose)
+
 	config.ServiceConfig = conf.ServiceConfig
+	t0 := time.Now()
+	config.LoadConfigFile(h.Layer.TemplateFile, opts, *verbose)
 	config.ServiceConfig.NameSpace = namespace
 
-	log.Printf("xxxxx %#v", config)
+	generalHandler(config, w, r)
 }
 
 func main() {
 	router := mux.NewRouter()
-	router.HandleFunc("/", fileHandler)
 	for ns := range configMap {
 		config := configMap[ns]
+
+		var nsPrefix string
+		if ns != "." {
+			nsPrefix = ns
+		}
+		prefix := "/ows/" + nsPrefix
+
 		for _, layer := range config.Layers {
 			if len(layer.URLRouter) > 0 && len(layer.TemplateFile) > 0 {
 				r := layer.URLRouter
 				if r[0] == '/' {
 					r = r[1:]
 				}
-				var prefix string
-				if ns != "." {
-					prefix = ns + "/"
-				}
-				path := "/ows/" + prefix + r
+				path := prefix + "/" + r
 				handler := &DynamicLayerHandler{
 					Layer:     &layer,
 					Namespace: ns,
 				}
 				router.HandleFunc(path, handler.layerHandler)
 
-				log.Printf("xxxxxx %s", path)
+				log.Printf("dynamic layer: %s", path)
+			} else {
+				router.HandleFunc(prefix, owsHandler)
 			}
 		}
 	}
 
-	router.HandleFunc("/ows", owsHandler)
-	router.HandleFunc("/ows/", owsHandler)
-	http.Handle("/", router)
+	http.Handle("/ows/", router)
+	http.HandleFunc("/", fileHandler)
 
 	Info.Printf("GSKY is ready")
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), nil))
