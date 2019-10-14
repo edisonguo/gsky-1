@@ -521,6 +521,13 @@ func LoadAllConfigFiles(rootDir string, verbose bool) (map[string]*Config, error
 					sort.Slice(config.Layers[i].Overviews, func(m, n int) bool { return config.Layers[m].ZoomLimit < config.Layers[n].ZoomLimit })
 				}
 				config.Layers[i].NameSpace = ns
+
+				if len(config.Layers[i].Overviews) > 0 {
+					for _, ovr := range config.Layers[i].Overviews {
+						processOverviewTimestamps(config, &ovr, verbose)
+					}
+				}
+
 				for j := range config.Layers[i].Styles {
 					config.Layers[i].Styles[j].OWSHostname = config.Layers[i].OWSHostname
 					config.Layers[i].Styles[j].NameSpace = config.Layers[i].NameSpace
@@ -561,6 +568,10 @@ func LoadAllConfigFiles(rootDir string, verbose bool) (map[string]*Config, error
 
 					if len(config.Layers[i].Styles[j].Overviews) == 0 && len(config.Layers[i].Overviews) > 0 {
 						config.Layers[i].Styles[j].Overviews = config.Layers[i].Overviews
+					} else if len(config.Layers[i].Styles[j].Overviews) > 0 {
+						for _, ovr := range config.Layers[i].Styles[j].Overviews {
+							processOverviewTimestamps(config, &ovr, verbose)
+						}
 					}
 
 					if config.Layers[i].Styles[j].ZoomLimit == 0.0 && config.Layers[i].ZoomLimit != 0.0 {
@@ -797,6 +808,30 @@ func (config *Config) processFusionColourPalette(i int, configMap map[string]*Co
 		}
 	}
 	return nil
+}
+
+func processOverviewTimestamps(config *Config, layer *Layer, verbose bool) {
+	timestamps, token := GenerateDatesMas("", "", config.ServiceConfig.MASAddress, layer.DataSource, layer.RGBExpressions.VarList, 0, layer.TimestampToken, verbose)
+	if len(token) == 0 {
+		log.Printf("Failed to get MAS timestamps for overviews")
+		return
+	}
+	layer.TimestampToken = token
+
+	if len(timestamps) == 0 {
+		log.Printf("Failed to get MAS timestamps for overviews")
+		return
+	}	
+
+	start, errStart := time.Parse(ISOFormat, timestamps[0])
+	if errStart != nil {
+		log.Printf("start date parsing error: %v", errStart)
+		return
+	}
+	start = start.Truncate(24 * 60 * time.Minute)
+
+	layer.EffectiveStartDate = start.Format(ISOFormat)
+	layer.EffectiveEndDate = timestamps[len(timestamps)-1]
 }
 
 // CopyConfig makes a deep copy of the certain fields of the config object.

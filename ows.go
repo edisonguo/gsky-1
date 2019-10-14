@@ -398,8 +398,14 @@ func serveWMS(ctx context.Context, params utils.WMSParams, conf *utils.Config, r
 			iOvr := utils.FindLayerBestOverview(styleLayer, reqRes, true)
 			if iOvr >= 0 {
 				ovr := styleLayer.Overviews[iOvr]
-				geoReq.Collection = ovr.DataSource
-				masAddress = ovr.MASAddress
+				ovrStartDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
+				ovrEndDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
+				if (geoReq.StartTime >= ovrStartDate && geoReq.StartTime <= ovrEndDate) || (geoReq.EndTime != nil && geoReq.EndTime >= ovrStartDate && geoReq.EndTime <= ovrEndDate) {
+					geoReq.Collection = ovr.DataSource
+					masAddress = ovr.MASAddress
+				} else {
+					hasOverview = false
+				}
 			}
 		}
 
