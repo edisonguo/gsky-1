@@ -400,7 +400,7 @@ func serveWMS(ctx context.Context, params utils.WMSParams, conf *utils.Config, r
 				ovr := styleLayer.Overviews[iOvr]
 				ovrStartDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
 				ovrEndDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
-				if (geoReq.StartTime >= ovrStartDate && geoReq.StartTime <= ovrEndDate) || (geoReq.EndTime != nil && geoReq.EndTime >= ovrStartDate && geoReq.EndTime <= ovrEndDate) {
+				if int64(geoReq.StartTime.Sub(ovrStartDate)) >= 0 && int64(geoReq.StartTime.Sub(ovrEndDate)) <= 0 || (geoReq.EndTime != nil && int64(geoReq.EndTime.Sub(ovrStartDate)) >= 0 && int64(geoReq.EndTime.Sub(ovrEndDate)) <= 0) {
 					geoReq.Collection = ovr.DataSource
 					masAddress = ovr.MASAddress
 				} else {

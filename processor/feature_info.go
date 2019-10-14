@@ -280,8 +280,14 @@ func getRaster(ctx context.Context, params utils.WMSParams, conf *utils.Config, 
 		iOvr := utils.FindLayerBestOverview(styleLayer, reqRes, true)
 		if iOvr >= 0 {
 			ovr := styleLayer.Overviews[iOvr]
-			geoReq.Collection = ovr.DataSource
-			masAddress = ovr.MASAddress
+			ovrStartDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
+			ovrEndDate, _ := time.Parse(utils.ISOFormat, ovr.EffectiveStartDate)
+			if int64(geoReq.StartTime.Sub(ovrStartDate)) >= 0 && int64(geoReq.StartTime.Sub(ovrEndDate)) <= 0 || (geoReq.EndTime != nil && int64(geoReq.EndTime.Sub(ovrStartDate)) >= 0 && int64(geoReq.EndTime.Sub(ovrEndDate)) <= 0) {
+				geoReq.Collection = ovr.DataSource
+				masAddress = ovr.MASAddress
+			} else {
+				hasOverview = false
+			}
 		}
 	}
 
