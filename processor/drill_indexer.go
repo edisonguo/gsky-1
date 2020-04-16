@@ -1,9 +1,11 @@
 package processor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CloudyKit/jet"
 	geo "github.com/nci/geometry"
 	"github.com/nci/gsky/utils"
 )
@@ -141,11 +144,11 @@ func (p *DrillIndexer) Run(verbose bool) {
 
 		switch len(metadata.GDALDatasets) {
 		case 0:
-			p.Out <- &GeoDrillGranule{"NULL", utils.EmptyTileNS, "Byte", nil, geoReq.Geometry, geoReq.CRS, nil, nil, nil, nil, 0, false, 0, 0, geoReq.MetricsCollector}
+			p.Out <- &GeoDrillGranule{"NULL", utils.EmptyTileNS, "Byte", nil, geoReq.Geometry, geoReq.CRS, "", nil, nil, 0, false, 0, 0, geoReq.MetricsCollector}
 		default:
 			var grans []*GeoDrillGranule
 			for _, ds := range metadata.GDALDatasets {
-				grans = append(grans, &GeoDrillGranule{ds.DSName, ds.NameSpace, ds.ArrayType, ds.TimeStamps, geoReq.Geometry, geoReq.CRS, geoReq.Mask, nil, ds.Means, ds.SampleCounts, ds.NoData, p.Approx, geoReq.ClipUpper, geoReq.ClipLower, geoReq.MetricsCollector})
+				grans = append(grans, &GeoDrillGranule{ds.DSName, ds.NameSpace, ds.ArrayType, ds.TimeStamps, geoReq.Geometry, geoReq.CRS, "", ds.Means, ds.SampleCounts, ds.NoData, p.Approx, geoReq.ClipUpper, geoReq.ClipLower, geoReq.MetricsCollector})
 			}
 
 			if geoReq.Mask == nil {
@@ -170,29 +173,77 @@ func (p *DrillIndexer) Run(verbose bool) {
 					dataNSLookup[ns] = true
 				}
 
-				maskNSLookup := make(map[string]bool)
-				for _, ns := range geoReq.Mask.IDExpressions.VarList {
-					maskNSLookup[ns] = true
+				maskNSLookup := make(map[string]int)
+				for iv, ns := range geoReq.Mask.IDExpressions.VarList {
+					maskNSLookup[ns] = iv
 				}
 
+				path := "."
+				view := jet.NewSet(jet.SafeWriter(func(w io.Writer, b []byte) {
+					w.Write(b)
+				}), path, "/")
+
+				template, err := view.GetTemplate(geoReq.VRTURL)
+				if err != nil {
+					log.Printf("Indexer returned error: %v", err)
+					p.Error <- fmt.Errorf("Indexer returned error: %v", err)
+					return
+				}
+
+				isFirst := true
 				for _, granMasks := range granMaskGroups {
 					var dataGrans []*GeoDrillGranule
-					var maskGrans []*GeoDrillGranule
+					maskGrans := make([]*GeoDrillGranule, len(maskNSLookup))
+					nMaskGrans := 0
+					nDataGrans := 0
 					for _, gran := range granMasks {
 						if _, found := dataNSLookup[gran.NameSpace]; found {
 							dataGrans = append(dataGrans, gran)
+							nDataGrans++
 						}
 
-						if _, found := maskNSLookup[gran.NameSpace]; found {
-							maskGrans = append(maskGrans, gran)
+						if iv, found := maskNSLookup[gran.NameSpace]; found {
+							maskGrans[iv] = gran
+							nMaskGrans++
 						}
 					}
 
 					for _, dg := range dataGrans {
-						//log.Printf("xxxxxx (%v: %v)", dg.NameSpace, dg.Path)
+						if nDataGrans != len(dataNSLookup) {
+							msg := fmt.Sprintf("Indexer returned error: %v, data namespaces=%v, data grans=%v", dg.Path, len(dataNSLookup), nDataGrans)
+							log.Printf(msg)
+							p.Error <- fmt.Errorf(msg)
+							return
+						}
+						if nMaskGrans != len(maskNSLookup) {
+							msg := fmt.Sprintf("Indexer returned error: %v, mask namespaces=%v, mask grans=%v", dg.Path, len(maskNSLookup), nMaskGrans)
+							log.Printf(msg)
+							p.Error <- fmt.Errorf(msg)
+							return
+						}
+
+						type GranuleInfo struct {
+							Data  *GeoDrillGranule
+							Masks []*GeoDrillGranule
+						}
+
+						granInfo := &GranuleInfo{Data: dg}
 						for _, mg := range maskGrans {
-							dg.MaskGranules = append(dg.MaskGranules, mg)
-							//log.Printf("     (%v: %v), ", mg.NameSpace, mg.Path)
+							granInfo.Masks = append(granInfo.Masks, mg)
+						}
+
+						var resBuf bytes.Buffer
+						vars := make(jet.VarMap)
+						if err = template.Execute(&resBuf, vars, granInfo); err != nil {
+							log.Printf("Indexer VRT error: %v", err)
+							p.Error <- fmt.Errorf("Indexer VRT error: %v", err)
+							return
+						}
+						dg.VRT = resBuf.String()
+
+						if isFirst && verbose {
+							log.Printf("vrt: %v, %v", dg.Path, dg.VRT)
+							isFirst = false
 						}
 
 						p.Out <- dg

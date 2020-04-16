@@ -31,8 +31,7 @@ type GeoDrillGranule struct {
 	TimeStamps       []time.Time
 	Geometry         string
 	CRS              string
-	Mask             *utils.Mask
-	MaskGranules     []*GeoDrillGranule
+	VRT              string
 	Means            []float64
 	SampleCounts     []int
 	NoData           float64
