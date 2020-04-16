@@ -14,6 +14,7 @@ func InitGdal() {
 	setDefaultEnv("GDAL_NETCDF_VERIFY_DIMS", "NO")
 	setDefaultEnv("GDAL_PAM_ENABLED", "NO")
 	setDefaultEnv("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
+	setDefaultEnv("GDAL_VRT_ENABLE_PYTHON", "YES")
 
 	exeFilePath, err := os.Executable()
 	if err == nil {

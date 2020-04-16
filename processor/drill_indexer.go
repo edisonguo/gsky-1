@@ -60,7 +60,14 @@ func (p *DrillIndexer) Run(verbose bool) {
 			return
 		}
 
-		namespaces := strings.Join(geoReq.NameSpaces, ",")
+		ns := geoReq.NameSpaces
+		if geoReq.Mask != nil {
+			for _, v := range geoReq.Mask.IDExpressions.VarList {
+				ns = append(ns, v)
+			}
+		}
+		namespaces := strings.Join(ns, ",")
+
 		start := time.Now()
 		startTimeStr := ""
 		if !time.Time.IsZero(geoReq.StartTime) {
@@ -134,10 +141,10 @@ func (p *DrillIndexer) Run(verbose bool) {
 
 		switch len(metadata.GDALDatasets) {
 		case 0:
-			p.Out <- &GeoDrillGranule{"NULL", utils.EmptyTileNS, "Byte", nil, geoReq.Geometry, geoReq.CRS, nil, nil, 0, false, 0, 0, geoReq.MetricsCollector}
+			p.Out <- &GeoDrillGranule{"NULL", utils.EmptyTileNS, "Byte", nil, geoReq.Geometry, geoReq.CRS, nil, nil, nil, 0, false, 0, 0, geoReq.MetricsCollector}
 		default:
 			for _, ds := range metadata.GDALDatasets {
-				p.Out <- &GeoDrillGranule{ds.DSName, ds.NameSpace, ds.ArrayType, ds.TimeStamps, geoReq.Geometry, geoReq.CRS, ds.Means, ds.SampleCounts, ds.NoData, p.Approx, geoReq.ClipUpper, geoReq.ClipLower, geoReq.MetricsCollector}
+				p.Out <- &GeoDrillGranule{ds.DSName, ds.NameSpace, ds.ArrayType, ds.TimeStamps, geoReq.Geometry, geoReq.CRS, geoReq.Mask, ds.Means, ds.SampleCounts, ds.NoData, p.Approx, geoReq.ClipUpper, geoReq.ClipLower, geoReq.MetricsCollector}
 			}
 		}
 	}
