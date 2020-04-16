@@ -130,13 +130,13 @@ func NewVRTManager(vrt []byte) (*VRTManager, error) {
 }
 
 func (mgr *VRTManager) Close() {
-	if mgr.vrtC != nil {
-		C.free(unsafe.Pointer(mgr.vrtC))
-	}
-
 	if len(mgr.DSFileName) > 0 {
 		fileC := C.CString(mgr.DSFileName)
 		C.VSIUnlink(fileC)
 		C.free(unsafe.Pointer(fileC))
+	}
+
+	if mgr.vrtC != nil {
+		C.free(unsafe.Pointer(mgr.vrtC))
 	}
 }
