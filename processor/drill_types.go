@@ -16,6 +16,7 @@ type GeoDrillRequest struct {
 	NameSpaces       []string
 	BandExpr         *utils.BandExpressions
 	Mask             *utils.Mask
+	VRTURL           string
 	StartTime        time.Time
 	EndTime          time.Time
 	ClipUpper        float32
@@ -31,6 +32,7 @@ type GeoDrillGranule struct {
 	Geometry         string
 	CRS              string
 	Mask             *utils.Mask
+	MaskGranules     []*GeoDrillGranule
 	Means            []float64
 	SampleCounts     []int
 	NoData           float64

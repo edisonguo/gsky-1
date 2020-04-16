@@ -108,6 +108,7 @@ type Layer struct {
 	Title                        string   `json:"title"`
 	Abstract                     string   `json:"abstract"`
 	MetadataURL                  string   `json:"metadata_url"`
+	VRTURL                       string   `json:"vrt_url"`
 	DataURL                      string   `json:"data_url"`
 	Overviews                    []Layer  `json:"overviews"`
 	InputLayers                  []Layer  `json:"input_layers"`
