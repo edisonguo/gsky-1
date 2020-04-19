@@ -137,7 +137,6 @@ func readData(ds C.GDALDatasetH, bands []int32, geom C.OGRGeometryH, bandStrides
 		}
 
 		effectiveNBands := len(bandsRead)
-
 		dataBuf := make([]float32, dsDscr.CountX*dsDscr.CountY*int32(effectiveNBands))
 		C.GDALDatasetRasterIO(ds, C.GF_Read, C.int(dsDscr.OffX), C.int(dsDscr.OffY), C.int(dsDscr.CountX), C.int(dsDscr.CountY), unsafe.Pointer(&dataBuf[0]), C.int(dsDscr.CountX), C.int(dsDscr.CountY), C.GDT_Float32, C.int(effectiveNBands), (*C.int)(unsafe.Pointer(&bandsRead[0])), 0, 0, 0)
 		metrics.BytesRead += int64(len(dataBuf)) * int64(dSize)
@@ -300,6 +299,7 @@ func createMask(ds C.GDALDatasetH, g C.OGRGeometryH, offsetX, offsetY, countX, c
 	}
 
 	ic := C.OGR_G_Clone(g)
+	defer C.OGR_G_DestroyGeometry(ic)
 
 	geomBurnValue := C.double(255)
 	panBandList := []C.int{C.int(1)}
@@ -360,6 +360,8 @@ func getDrillFileDescriptor(ds C.GDALDatasetH, g C.OGRGeometryH) DrillFileDescri
 		gCopy = C.OGR_G_Clone(g)
 	}
 
+	defer C.OGR_G_DestroyGeometry(gCopy)
+
 	if C.GoString(C.GDALGetProjectionRef(ds)) != "" {
 		desSRS := C.OSRNewSpatialReference(C.GDALGetProjectionRef(ds))
 		defer C.OSRDestroySpatialReference(desSRS)
@@ -368,14 +370,17 @@ func getDrillFileDescriptor(ds C.GDALDatasetH, g C.OGRGeometryH) DrillFileDescri
 		C.OSRSetAxisMappingStrategy(srcSRS, C.OAMS_TRADITIONAL_GIS_ORDER)
 		trans := C.OCTNewCoordinateTransformation(srcSRS, desSRS)
 		C.OGR_G_Transform(gCopy, trans)
+		C.OCTDestroyCoordinateTransformation(trans)
 	}
 
 	fileEnv := envelopePolygon(ds)
-	var fileWkt *C.char
-	C.OGR_G_ExportToWkt(fileEnv, &fileWkt)
+	defer C.OGR_G_DestroyGeometry(fileEnv)
+	//var fileWkt *C.char
+	//C.OGR_G_ExportToWkt(fileEnv, &fileWkt)
 	inters := C.OGR_G_Intersection(gCopy, fileEnv)
-	var intersWkt *C.char
-	C.OGR_G_ExportToWkt(inters, &intersWkt)
+	defer C.OGR_G_DestroyGeometry(inters)
+	//var intersWkt *C.char
+	//C.OGR_G_ExportToWkt(inters, &intersWkt)
 
 	var env C.OGREnvelope
 	C.OGR_G_GetEnvelope(inters, &env)

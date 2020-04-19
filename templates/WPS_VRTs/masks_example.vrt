@@ -1,7 +1,9 @@
 <VRTDataset>
     <VRTRasterBand band="1" subClass="VRTDerivedRasterBand">
-        <PixelFunctionType>apply_masks</PixelFunctionType>
-        <PixelFunctionLanguage>Python</PixelFunctionLanguage>
+        <PixelFunctionType>Landsatv3CloudMasks</PixelFunctionType>
+
+        <!--
+        <PixelFunctionLanguage>python</PixelFunctionLanguage>
         <PixelFunctionCode><![CDATA[
 def apply_masks(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
     raster_ysize, buf_radius, gt, **kwargs):
@@ -10,6 +12,7 @@ def apply_masks(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
   out_ar[:] = in_ar[0]
         ]]>
         </PixelFunctionCode>
+        -->
         <SimpleSource  metadata-template="1">
             <SourceFilename>{{ .Data.Path }}</SourceFilename>
         </SimpleSource>

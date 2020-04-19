@@ -25,9 +25,10 @@ type ErrorMsg struct {
 }
 
 type Task struct {
-	Payload *pb.GeoRPCGranule
-	Resp    chan *pb.Result
-	Error   chan error
+	Payload   *pb.GeoRPCGranule
+	Resp      chan *pb.Result
+	Error     chan error
+	NumTrials int
 }
 
 type Process struct {
@@ -106,8 +107,14 @@ func (p *Process) Start() error {
 			conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: p.Address, Net: "unix"})
 			if err != nil {
 				syscall.Kill(p.Cmd.Process.Pid, syscall.SIGKILL)
-				task.Error <- fmt.Errorf("dial failed: %v", err)
-				p.ErrorMsg <- &ErrorMsg{p.Address, false, err}
+				task.NumTrials++
+				log.Printf("unix dial comm failed: %v", task.NumTrials)
+				if task.NumTrials >= 5 {
+					task.Error <- fmt.Errorf("dial failed: %v", err)
+					p.ErrorMsg <- &ErrorMsg{p.Address, false, err}
+				} else {
+					p.TaskQueue <- task
+				}
 				break
 			}
 
@@ -140,6 +147,15 @@ func (p *Process) Start() error {
 			if err != nil {
 				task.Error <- fmt.Errorf("error decoding data: %v", err)
 				continue
+			}
+
+			if len(out.Error) == 0 {
+				task.NumTrials++
+				log.Printf("comm failed: %v", task.NumTrials)
+				if task.NumTrials < 5 {
+					p.TaskQueue <- task
+					break
+				}
 			}
 
 			task.Resp <- out
