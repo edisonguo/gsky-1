@@ -106,15 +106,7 @@ func (p *Process) Start() error {
 		for task := range p.TaskQueue {
 			conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: p.Address, Net: "unix"})
 			if err != nil {
-				syscall.Kill(p.Cmd.Process.Pid, syscall.SIGKILL)
-				task.NumTrials++
-				log.Printf("unix dial comm failed: %v", task.NumTrials)
-				if task.NumTrials >= 5 {
-					task.Error <- fmt.Errorf("dial failed: %v", err)
-					p.ErrorMsg <- &ErrorMsg{p.Address, false, err}
-				} else {
-					p.TaskQueue <- task
-				}
+				p.retryTask(task, fmt.Errorf("dial failed: %v", err))
 				break
 			}
 
@@ -128,8 +120,8 @@ func (p *Process) Start() error {
 			n, err := conn.Write(inb)
 			if err != nil {
 				conn.Close()
-				task.Error <- fmt.Errorf("error writing %d bytes of data: %v", n, err)
-				continue
+				p.retryTask(task, fmt.Errorf("conn.write failed: %v, bytes written: %v", err, n))
+				break
 			}
 			conn.CloseWrite()
 
@@ -137,8 +129,8 @@ func (p *Process) Start() error {
 			nr, err := io.Copy(&buf, conn)
 			if err != nil {
 				conn.Close()
-				task.Error <- fmt.Errorf("error reading %d bytes of data: %v", nr, err)
-				continue
+				p.retryTask(task, fmt.Errorf("io.copy failed: %v, bytes read: %v", err, nr))
+				break
 			}
 			conn.Close()
 
@@ -150,12 +142,8 @@ func (p *Process) Start() error {
 			}
 
 			if len(out.Error) == 0 {
-				task.NumTrials++
-				log.Printf("comm failed: %v", task.NumTrials)
-				if task.NumTrials < 5 {
-					p.TaskQueue <- task
-					break
-				}
+				p.retryTask(task, fmt.Errorf("process communication error"))
+				break
 			}
 
 			task.Resp <- out
@@ -193,6 +181,17 @@ func (p *Process) Start() error {
 	}()
 
 	return nil
+}
+
+func (p *Process) retryTask(task *Task, taskErr error) {
+	syscall.Kill(p.Cmd.Process.Pid, syscall.SIGKILL)
+	task.NumTrials++
+	if task.NumTrials >= 5 {
+		task.Error <- taskErr
+	} else {
+		p.TaskQueue <- task
+	}
+	p.ErrorMsg <- &ErrorMsg{p.Address, false, fmt.Errorf("Process IO failed: %v, retrying task: %v", taskErr, task.NumTrials)}
 }
 
 func (p *Process) RemoveTempFiles() {
