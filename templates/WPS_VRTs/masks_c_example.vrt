@@ -1,0 +1,13 @@
+<VRTDataset>
+    <VRTRasterBand band="1" subClass="VRTDerivedRasterBand">
+        <PixelFunctionType>Landsatv3CloudMasks</PixelFunctionType>
+        <SimpleSource  metadata-template="1">
+            <SourceFilename>{{ .Data.Path }}</SourceFilename>
+        </SimpleSource>
+        {{ range g := .Masks }}
+        <SimpleSource>
+            <SourceFilename>{{ g.Path }}</SourceFilename>
+        </SimpleSource>
+        {{ end }}
+    </VRTRasterBand>
+</VRTDataset>
