@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -174,6 +176,8 @@ func (mon *OOMMonitor) getPollInterval(memInfo *memoryInfo) int {
 }
 
 func (mon *OOMMonitor) StartMonitorLoop() error {
+	//rand.Seed(time.Now().UnixNano())
+	rng := rand.New(rand.NewSource(99))
 	pattern := regexp.MustCompile(mon.ExecMatch)
 
 	isMemInfoFirst := true
@@ -200,25 +204,76 @@ func (mon *OOMMonitor) StartMonitorLoop() error {
 			return err
 		}
 
-		maxProc := &processStatus{Pid: -1, VmRSS: -1}
-		for _, proc := range procStatus {
-			if proc.VmRSS > maxProc.VmRSS {
-				maxProc = proc
+		if len(procStatus) > 0 {
+			sort.Slice(procStatus, func(i, j int) bool { return procStatus[i].VmRSS <= procStatus[j].VmRSS })
+			norm := float32(0)
+			for ip := 0; ip < len(procStatus); ip++ {
+				norm += float32(procStatus[ip].VmRSS)
 			}
-		}
 
-		if maxProc.Pid > 0 {
-			syscall.Kill(maxProc.Pid, syscall.SIGKILL)
+			cdf := make([]float32, len(procStatus))
+			cdf[0] = float32(procStatus[0].VmRSS) / norm
+			nProcDraws := -1
+			for ip := 1; ip < len(procStatus); ip++ {
+				cdf[ip] = cdf[ip-1] + float32(procStatus[ip].VmRSS)/norm
+				if nProcDraws < 0 && cdf[ip] >= 0.7 {
+					nProcDraws = len(procStatus) - ip
+				}
+			}
+
+			if nProcDraws < 1 {
+				nProcDraws = 1
+			}
+
 			if mon.Verbose {
-				log.Printf("OOM SIGKILL sent to process: %s, PID: %d", maxProc.Name, maxProc.Pid)
+				log.Printf("OOM CDF: %v", cdf)
+			}
+
+			procTerminated := make([]int, len(procStatus))
+			for ip := 0; ip < len(procTerminated); ip++ {
+				procTerminated[ip] = -1
+			}
+
+			for ip := 0; ip < nProcDraws; ip++ {
+				proposalProba := rng.Float32()
+
+				ic := 0
+				for ; ic < len(cdf); ic++ {
+					if cdf[ic] >= proposalProba {
+						break
+					}
+				}
+
+				if procTerminated[ic] >= 0 {
+					continue
+				}
+
+				proc := procStatus[ic]
+
+				syscall.Kill(proc.Pid, syscall.SIGKILL)
+				procTerminated[ic] = ic
+
+				if mon.Verbose {
+					log.Printf("OOM SIGKILL sent to process(%d), PID: %d, VmRSS: %d, proba: %.5f", ic, proc.Pid, proc.VmRSS, proposalProba)
+				}
 			}
 
 			for i := 1; i < 100; i++ {
-				err := syscall.Kill(maxProc.Pid, 0)
-				if err != nil {
-					if mon.Verbose {
-						log.Printf("OOM terminated process in %.1f secs: %s, PID: %d", float32(i)*0.1, maxProc.Name, maxProc.Pid)
+				nProcs := 0
+				for ip := 0; ip < len(procTerminated); ip++ {
+					if procTerminated[ip] >= 0 {
+						proc := procStatus[ip]
+						err := syscall.Kill(proc.Pid, 0)
+						if err != nil {
+							if mon.Verbose {
+								log.Printf("OOM terminated process in %.1f secs: %s, PID: %d", float32(i)*0.1, proc.Name, proc.Pid)
+							}
+							procTerminated[ip] = -1
+							nProcs++
+						}
 					}
+				}
+				if nProcs >= nProcDraws {
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
