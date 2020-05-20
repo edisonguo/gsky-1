@@ -42,8 +42,15 @@ func (gi *GeoDrillGRPC) Run(bandStrides int, decileCount int, pixelCount int, ve
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(DefaultWpsRecvMsgSize)),
 	}
 
-	conns := make([]*grpc.ClientConn, len(gi.Clients))
-	for i, client := range gi.Clients {
+	clients := make([]string, 16*len(gi.Clients))
+	for i := 0; i < 16; i++ {
+		for j := 0; j < len(gi.Clients); j++ {
+			clients[i*len(gi.Clients)+j] = gi.Clients[j]
+		}
+	}
+
+	conns := make([]*grpc.ClientConn, len(clients))
+	for i, client := range clients {
 		conn, err := grpc.Dial(client, opts...)
 		if err != nil {
 			log.Fatalf("gRPC connection problem: %v", err)
@@ -111,7 +118,7 @@ func (gi *GeoDrillGRPC) Run(bandStrides int, decileCount int, pixelCount int, ve
 		}
 
 		if cLimiter == nil {
-			cLimiter = NewConcLimiter(geoReq.GrpcConcLimit * len(conns))
+			cLimiter = NewConcLimiter(len(conns))
 		}
 
 		i++

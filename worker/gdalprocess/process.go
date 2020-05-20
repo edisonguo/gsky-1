@@ -72,6 +72,52 @@ func NewProcess(tQueue chan *Task, binary string, port int, errChan chan *ErrorM
 	return &Process{tQueue, addr, tmpFileName, cmd, combinedOutput, maxTaskProcessed, errChan, verbose}
 }
 
+func StartGrpcProcess(binary string, port int, verbose bool) error {
+	verboseArg := ""
+	if verbose {
+		verboseArg = "-verbose"
+	}
+
+	cmd := exec.Command(binary, "-p", fmt.Sprintf("%d", port), "-n", fmt.Sprintf("%d", -1), verboseArg)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	combinedOutput, err := cmd.StderrPipe()
+	if err != nil {
+		combinedOutput = nil
+		log.Printf("Failed to obtain subprocess stderr pipe: %v\n", err)
+	} else {
+		cmd.Stdout = cmd.Stderr
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		if combinedOutput != nil {
+			reader := bufio.NewReader(combinedOutput)
+			for {
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					break
+				}
+
+				log.Println(cmd.Process.Pid, line)
+			}
+		}
+
+		err = cmd.Wait()
+		if err != nil {
+			log.Printf("process exited: %v", err)
+		}
+
+	}()
+
+	return nil
+
+}
+
 func (p *Process) Start() error {
 	err := p.Cmd.Start()
 	if err != nil {

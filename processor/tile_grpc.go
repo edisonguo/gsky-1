@@ -105,15 +105,22 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(gi.MaxGrpcRecvMsgSize)),
 			}
 
-			clientIdx := make([]int, len(gi.Clients))
+			clients := make([]string, g0.GrpcConcLimit*len(gi.Clients))
+			for i := 0; i < g0.GrpcConcLimit; i++ {
+				for j := 0; j < len(gi.Clients); j++ {
+					clients[i*len(gi.Clients)+j] = gi.Clients[j]
+				}
+			}
+
+			clientIdx := make([]int, len(clients))
 			for ic := range clientIdx {
 				clientIdx[ic] = ic
 			}
 			rand.Shuffle(len(clientIdx), func(i, j int) { clientIdx[i], clientIdx[j] = clientIdx[j], clientIdx[i] })
 
-			effectivePoolSize := len(gi.Clients)
+			effectivePoolSize := len(clients)
 			for i := 0; i < effectivePoolSize; i++ {
-				conn, err := grpc.Dial(gi.Clients[clientIdx[i]], opts...)
+				conn, err := grpc.Dial(clients[clientIdx[i]], opts...)
 				if err != nil {
 					log.Printf("gRPC connection problem: %v", err)
 					continue
@@ -139,6 +146,10 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 			C.free(unsafe.Pointer(crsC))
 			C.OSRDestroySpatialReference(hSRS)
 
+			if verbose {
+				log.Printf("tile grpc concLimit: %v, poolSize: %v", g0.GrpcConcLimit, len(connPool))
+			}
+			g0.GrpcConcLimit = 1
 			cLimiter = NewConcLimiter(g0.GrpcConcLimit * len(connPool))
 		}
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	pp "github.com/nci/gsky/worker/gdalprocess"
 	pb "github.com/nci/gsky/worker/gdalservice"
@@ -20,6 +21,8 @@ import (
 	reuseport "github.com/kavu/go_reuseport"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+
+	"github.com/nci/gsky/utils"
 )
 
 type server struct {
@@ -62,7 +65,42 @@ func main() {
 	verbose := flag.Bool("verbose", false, "verbose logging")
 	flag.Parse()
 
-	procPool, err := pp.CreateProcessPool(*poolSize, *executable, *port, *maxTaskProcessed, *verbose)
+	if *poolSize > 0 {
+		go func() {
+			parts := strings.Split(*executable, "/")
+			fileName := parts[len(parts)-1]
+			execMatch := fileName
+
+			// The maximum length of the name field under /proc/<pid>/status is 16 bytes
+			maxLen := 15
+			if len(fileName) > maxLen {
+				execMatch = fileName[:maxLen]
+			}
+			mon := pp.NewOOMMonitor(execMatch, *oomThreshold, *verbose)
+			mon.StartMonitorLoop()
+		}()
+
+		*executable = os.Args[0]
+
+		inProcess := *executable == os.Args[0]
+		if inProcess {
+			for i := 0; i < *poolSize; i++ {
+				pp.StartGrpcProcess(*executable, *port, *verbose)
+			}
+		}
+
+		for {
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	inProcess := *poolSize <= 0
+	if inProcess {
+		*poolSize = 1
+		utils.InitGdal()
+	}
+
+	procPool, err := pp.CreateProcessPool(*poolSize, *executable, *port, *maxTaskProcessed, inProcess, *verbose)
 	if err != nil {
 		log.Printf("Failed to create process pool: %v", err)
 		os.Exit(2)
@@ -81,20 +119,6 @@ func main() {
 				os.Exit(1)
 			}
 		}
-	}()
-
-	go func() {
-		parts := strings.Split(*executable, "/")
-		fileName := parts[len(parts)-1]
-		execMatch := fileName
-
-		// The maximum length of the name field under /proc/<pid>/status is 16 bytes
-		maxLen := 15
-		if len(fileName) > maxLen {
-			execMatch = fileName[:maxLen]
-		}
-		mon := pp.NewOOMMonitor(execMatch, *oomThreshold, *verbose)
-		mon.StartMonitorLoop()
 	}()
 
 	s := grpc.NewServer()

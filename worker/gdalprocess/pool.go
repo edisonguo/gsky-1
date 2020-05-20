@@ -2,6 +2,7 @@ package gdalprocess
 
 import (
 	"fmt"
+	pb "github.com/nci/gsky/worker/gdalservice"
 	"log"
 	"math/rand"
 )
@@ -33,9 +34,36 @@ func (p *ProcessPool) CreateProcess(executable string, port int, verbose bool) (
 	return proc, err
 }
 
-func CreateProcessPool(n int, executable string, port int, maxTaskProcessed int, verbose bool) (*ProcessPool, error) {
+func CreateProcessPool(n int, executable string, port int, maxTaskProcessed int, inProcess bool, verbose bool) (*ProcessPool, error) {
 
 	p := &ProcessPool{[]*Process{}, n, make(chan *Task, DefaultQueueSizePerProcess*n), maxTaskProcessed, make(chan *ErrorMsg)}
+	if inProcess {
+		proc := &Process{}
+		p.Pool = append(p.Pool, proc)
+
+		go func() {
+			for task := range p.TaskQueue {
+				in := task.Payload
+				var out *pb.Result
+				switch in.Operation {
+				case "warp":
+					out = WarpRaster(in)
+				case "drill":
+					out = DrillDataset(in)
+				case "extent":
+					out = ComputeReprojectExtent(in)
+				case "info":
+					out = ExtractGDALInfo(in)
+				default:
+					out.Error = fmt.Sprintf("Unknown operation: %s", in.Operation)
+				}
+
+				task.Resp <- out
+			}
+		}()
+
+		return p, nil
+	}
 
 	go func() {
 		for {
