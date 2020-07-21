@@ -67,8 +67,10 @@ type PosixCrawler struct {
 	Outputs       chan *PosixInfo
 	Error         chan error
 	wg            sync.WaitGroup
+	conc          int
 	concLimit     chan struct{}
 	outputDone    chan struct{}
+	files         chan string
 	pattern       *goeval.EvaluableExpression
 	followSymlink bool
 	outputFormat  string
@@ -85,8 +87,10 @@ func NewPosixCrawler(conc int, pattern *goeval.EvaluableExpression, followSymlin
 		Outputs:       make(chan *PosixInfo, 4096),
 		Error:         make(chan error, 100),
 		wg:            sync.WaitGroup{},
+		conc:          conc,
 		concLimit:     make(chan struct{}, conc),
 		outputDone:    make(chan struct{}, 1),
+		files:         make(chan string, 20480),
 		pattern:       pattern,
 		followSymlink: followSymlink,
 		outputFormat:  outputFormat,
@@ -97,10 +101,30 @@ func NewPosixCrawler(conc int, pattern *goeval.EvaluableExpression, followSymlin
 func (pc *PosixCrawler) Crawl(currPath string) error {
 	go pc.outputResult()
 
+	for i := 0; i < pc.conc; i++ {
+		go func() {
+			for file := range pc.files {
+				fStat, err := os.Lstat(file)
+				if err != nil {
+					select {
+					case pc.Error <- err:
+					default:
+					}
+					pc.wg.Done()
+					continue
+				}
+				pc.Outputs <- pc.getFileInfo(file, fStat)
+				pc.wg.Done()
+			}
+		}()
+	}
+
 	pc.wg.Add(1)
 	pc.concLimit <- struct{}{}
 	pc.crawlDir(currPath, false)
 	pc.wg.Wait()
+
+	close(pc.files)
 
 	close(pc.Outputs)
 	<-pc.outputDone
@@ -199,27 +223,11 @@ func (pc *PosixCrawler) crawlDir(currPath string, serialised bool) {
 		}
 
 		if fStat == nil {
-			fStat, err = os.Lstat(filePath)
-			if err != nil {
-				select {
-				case pc.Error <- err:
-				default:
-				}
-				continue
-			}
+			pc.wg.Add(1)
+			pc.files <- filePath
+		} else {
+			pc.Outputs <- pc.getFileInfo(filePath, fStat)
 		}
-
-		stat := fStat.Sys().(*syscall.Stat_t)
-		fileSignature := fmt.Sprintf("%s%d%d%d%d", filePath, stat.Ino, stat.Size, stat.Mtim.Sec, stat.Mtim.Nsec)
-		info := &PosixInfo{
-			FilePath: filePath,
-			INode:    stat.Ino,
-			Size:     stat.Size,
-			MTime:    time.Unix(int64(stat.Mtim.Sec), int64(stat.Mtim.Nsec)).UTC(),
-			CTime:    time.Unix(int64(stat.Ctim.Sec), int64(stat.Ctim.Nsec)).UTC(),
-			ID:       fmt.Sprintf("%x", md5.Sum([]byte(fileSignature))),
-		}
-		pc.Outputs <- info
 	}
 }
 
@@ -291,6 +299,19 @@ func readDir(currDir string) ([]DirEntInfo, error) {
 		}
 	}
 	return entries, nil
+}
+
+func (pc *PosixCrawler) getFileInfo(filePath string, fStat os.FileInfo) *PosixInfo {
+	stat := fStat.Sys().(*syscall.Stat_t)
+	fileSignature := fmt.Sprintf("%s%d%d%d%d", filePath, stat.Ino, stat.Size, stat.Mtim.Sec, stat.Mtim.Nsec)
+	return &PosixInfo{
+		FilePath: filePath,
+		INode:    stat.Ino,
+		Size:     stat.Size,
+		MTime:    time.Unix(int64(stat.Mtim.Sec), int64(stat.Mtim.Nsec)).UTC(),
+		CTime:    time.Unix(int64(stat.Ctim.Sec), int64(stat.Ctim.Nsec)).UTC(),
+		ID:       fmt.Sprintf("%x", md5.Sum([]byte(fileSignature))),
+	}
 }
 
 func (pc *PosixCrawler) evaluatePatternExpression(filePath string, fileMode uint8) (bool, error) {
