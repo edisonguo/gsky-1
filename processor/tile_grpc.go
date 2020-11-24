@@ -62,6 +62,13 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 	var outRasters []*FlexRaster
 	var outMetrics []*pb.WorkerMetrics
 
+	type ClientMetrics struct {
+		WallTimeStart int64
+		WallTimeEnd   int64
+	}
+
+	var clientMetrics []*ClientMetrics
+
 	t0 := time.Now()
 
 	iGran := 0
@@ -202,6 +209,7 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 			gran := grans[ig]
 			outRasters = append(outRasters, nil)
 			outMetrics = append(outMetrics, nil)
+			clientMetrics = append(clientMetrics, nil)
 			select {
 			case <-gi.Context.Done():
 				gi.sendError(fmt.Errorf("tile grpc: context has been cancel: %v", gi.Context.Err()))
@@ -226,12 +234,17 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 					} else {
 						geot = g0.DstGeoTransform
 					}
+					ct0 := time.Now().UnixNano()
 					r, err := getRPCRaster(gi.Context, g, projWKT, geot, connPool[idx%len(connPool)])
+					ct1 := time.Now().UnixNano()
 					if err != nil {
 						gi.sendError(err)
 						r = &pb.Result{Raster: &pb.Raster{Data: make([]uint8, g.Width*g.Height), RasterType: "Byte", NoData: -1.}}
 					}
 					outMetrics[idx] = r.Metrics
+					if r.Metrics != nil {
+						clientMetrics[idx] = &ClientMetrics{ct0, ct1}
+					}
 					if len(r.Raster.Bbox) == 0 {
 						r.Raster.Bbox = []int32{0, 0, int32(g.Width), int32(g.Height)}
 					}
@@ -272,7 +285,7 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 			accumMetrics.BytesRead += outMetrics[i].BytesRead
 			accumMetrics.UserTime += outMetrics[i].UserTime
 			accumMetrics.SysTime += outMetrics[i].SysTime
-			fmt.Printf("%d,%d,%d\n", i, outMetrics[i].WallTimeStart, outMetrics[i].WallTimeEnd)
+			fmt.Printf("%d,%d,%d,%d,%d\n", i, clientMetrics[i].WallTimeStart, clientMetrics[i].WallTimeEnd, outMetrics[i].WallTimeStart, outMetrics[i].WallTimeEnd)
 		}
 	}
 	log.Printf("############ end of worker wall times ############")
