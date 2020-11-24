@@ -266,13 +266,16 @@ func (gi *GeoRasterGRPC) Run(varList []string, verbose bool) {
 		return
 	}
 
+	log.Printf("############ worker wall times ############")
 	for i := 0; i < len(outMetrics); i++ {
 		if outMetrics[i] != nil {
 			accumMetrics.BytesRead += outMetrics[i].BytesRead
 			accumMetrics.UserTime += outMetrics[i].UserTime
 			accumMetrics.SysTime += outMetrics[i].SysTime
+			fmt.Printf("%d,%d,%d\n", i, outMetrics[i].WallTimeStart, outMetrics[i].WallTimeEnd)
 		}
 	}
+	log.Printf("############ end of worker wall times ############")
 
 	if g0 != nil && g0.MetricsCollector != nil {
 		g0.MetricsCollector.Info.RPC.NumTiledGranules += iGran

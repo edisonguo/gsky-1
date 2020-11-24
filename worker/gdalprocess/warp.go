@@ -416,6 +416,7 @@ import (
 	"math"
 	"reflect"
 	"syscall"
+	"time"
 	"unsafe"
 
 	pb "github.com/nci/gsky/worker/gdalservice"
@@ -552,13 +553,17 @@ func WarpRaster(in *pb.GeoRPCGranule) *pb.Result {
 
 	var resUsage0, resUsage1 syscall.Rusage
 	syscall.Getrusage(syscall.RUSAGE_SELF, &resUsage0)
+	wt0 := time.Now().UnixNano()
 	cErr := C.warp_operation_fast(filePathC, srcProjRefC, pSrcGeot, pGeoLoc, dstProjRefC, (*C.double)(&in.DstGeot[0]), C.int(in.Width), C.int(in.Height), C.int(in.Bands[0]), C.int(in.SRSCf), (*unsafe.Pointer)(&dstBufC), (*C.int)(&dstBufSize), (*C.int)(&dstBboxC[0]), (*C.double)(&noData), (*C.GDALDataType)(&dType), &bytesReadC)
+	wt1 := time.Now().UnixNano()
 	syscall.Getrusage(syscall.RUSAGE_SELF, &resUsage1)
 
 	metrics := &pb.WorkerMetrics{
-		BytesRead: int64(bytesReadC),
-		UserTime:  resUsage1.Utime.Nano() - resUsage0.Utime.Nano(),
-		SysTime:   resUsage1.Stime.Nano() - resUsage0.Stime.Nano(),
+		BytesRead:     int64(bytesReadC),
+		UserTime:      resUsage1.Utime.Nano() - resUsage0.Utime.Nano(),
+		SysTime:       resUsage1.Stime.Nano() - resUsage0.Stime.Nano(),
+		WallTimeStart: wt0,
+		WallTimeEnd:   wt1,
 	}
 
 	if cErr != 0 {
