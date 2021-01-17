@@ -74,6 +74,7 @@ message WorkerMetrics {
     int64 sysTime = 3;
     int64 wallTimeStart = 4;
     int64 wallTimeEnd = 5;
+    string profileMsg = 6;
 }
 
 message Result {
